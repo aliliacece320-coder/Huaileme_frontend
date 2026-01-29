@@ -1,10 +1,6 @@
 # Huaileme · Huaileme Frontend
 
-<<<<<<< HEAD
 > Mobile-first fridge and food management app — waste less, worry less.
-=======
-> 面向移动端的食物管理应用，少浪费、更安心。
->>>>>>> 6092ba119b8f0e79995fea94ef65a5042e694be4
 
 **Huaileme (huaileme-mobile)** helps users track food at home, use ingredients before they expire, and reduce waste. Built with Vue 3 + Vite, it includes a home risk dashboard, AI scan-to-add, use-up recipes, zero-waste stats, and family accounts.
 
@@ -14,7 +10,6 @@
 
 ## Feature Overview
 
-<<<<<<< HEAD
 | Module | Description |
 |--------|--------------|
 | **Home Risk Dashboard** | View food by freshness / near expiry / expired at a glance |
@@ -23,16 +18,7 @@
 | **Zero-Waste Stats** | Track savings and waste trends, encourage sustainable habits |
 | **Virtual Fridge** | Manage food by zone with a visual view |
 | **Account & Family** | Login/register, family members, sync across devices |
-=======
-| 模块 | 说明 |
-|------|------|
-| **首页风险看板** | 按新鲜度/临期/已过期查看食物，一目了然 |
-| **AI 智能扫码** | 扫码录入食材，自动识别并加入库 |
-| **清库存菜谱** | 根据现有食材推荐菜谱，消灭库存 |
-| **零浪费统计** | 统计节省与浪费趋势，激励可持续习惯 |
-| **虚拟冰箱** | 按区域管理食物，可视化查看 |
-| **账号与家庭** | 登录/注册、家庭成员、多端同步 |
->>>>>>> 6092ba119b8f0e79995fea94ef65a5042e694be4
+
 
 ---
 
