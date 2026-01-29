@@ -131,7 +131,7 @@ For more API definitions, see **API/** (`API_SPEC.md`) and the module docs.
 ## Related Documentation
 
 - **[STRUCTURE.md](./STRUCTURE.md)** — Full project structure description
-- **[report.md](./report.md)** — Pre-production audit and fix summary
+- **[REPORT.md](./REPORT.md)** — Pre-production audit and fix summary
 - **API/** — Backend API docs (`API_SPEC.md`, `API_FOODS.md`, `API_RECIPES.md`, etc.)
 
 ---

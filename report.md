@@ -1,102 +1,97 @@
-## huaileme-mobile 最终审计报告（生产前）
+## huaileme-mobile Final Audit Report (Pre-Production)
 
-### 一、代码一致性与结构
+### 1. Code Consistency and Structure
 
-- **Vue 语法风格**
-  - `src/views/` 下所有视图组件均使用 Vue 3 的 `<script setup>` 组合式 API，没有残留 Options API 或混用写法。
-  - 逻辑块按照页面功能拆分清晰，目前每个 `<script setup>` 块行数均 **未超过 300 行**，因此尚不需要强制抽离到 `src/composables/`。后续一旦有单文件逻辑超出阈值，应新增对应 `useXXX.js` composable 并从组件中引用。
+- **Vue Syntax Style**
+  - All view components under `src/views/` use Vue 3 `<script setup>` Composition API; there is no remaining Options API or mixed style.
+  - Logic is split clearly by page responsibility; each `<script setup>` block is **under 300 lines**, so extraction into `src/composables/` is not required yet. Once a single file exceeds that threshold, a corresponding `useXXX.js` composable should be added and imported in the component.
 
-- **业务逻辑拆分**
-  - 由于当前各页面的逻辑复杂度和行数都在合理范围内，暂未创建 `src/composables/` 目录；这符合“超过 300 行再拆”的约定，不会影响可维护性。
-  - 全局状态相对简单，仅通过 `pinia` 的 `useUserStore` 管理认证相关信息（token/profile/family），结构清晰。
+- **Business Logic Split**
+  - Current pages keep logic complexity and line count within a reasonable range, so `src/composables/` has not been created; this aligns with the "split when over 300 lines" rule and does not hurt maintainability.
+  - Global state is simple and managed only via Pinia's `useUserStore` (token/profile/family); structure is clear.
 
-- **API JSDoc 文档化**
-  - `src/api/*.js` 中的所有对外请求方法均已补充 **详细 JSDoc**，包括：
-    - `foods.js`: 列表、详情、风险列表、统计摘要的字段结构（如 `days_left/daysLeft`、`freshnessScore/freshness_percentage`、`storageStatus` 等）。
-    - `recipes.js`: 推荐菜谱结构（`match_score/matchScore`、`cooking_time/estimatedTime`、`ingredients` 等）。
-    - `stats.js`: 各类统计与 `getWasteTrend` 的返回结构说明。
-    - `scan.js` / `images.js`: 扫码识别、图片优化的入参与返回字段。
-    - `foodActions.js` / `family.js` / `user.js` / `auth.js`: 行为类、家庭、用户资料、认证流程的字段定义。
-  - JSDoc 与视图中实际访问的字段已完成一一对齐，后续维护可直接参考文档注释。
+- **API JSDoc Documentation**
+  - All public request methods in `src/api/*.js` have **detailed JSDoc**, including:
+    - `foods.js`: list, detail, risk list, and stats summary field structures (e.g. `days_left/daysLeft`, `freshnessScore/freshness_percentage`, `storageStatus`).
+    - `recipes.js`: recommended recipe structure (`match_score/matchScore`, `cooking_time/estimatedTime`, `ingredients`, etc.).
+    - `stats.js`: descriptions of stats and `getWasteTrend` return structure.
+    - `scan.js` / `images.js`: scan recognition and image optimization params and return fields.
+    - `foodActions.js` / `family.js` / `user.js` / `auth.js`: field definitions for actions, family, user profile, and auth flow.
+  - JSDoc has been aligned with the fields actually used in views; future maintenance can rely on these comments.
 
-### 二、移动端交互与体验
+### 2. Mobile Interaction and UX
 
-- **返回逻辑与弹层**
-  - 当前项目未使用基于组件库的 Popup/Dialog/Drawer 组件，也未通过路由控制弹层；唯一的“全屏遮罩”为全局 Loading（`utils/toast.js` 中的 `showLoading`）。
-  - Loading 遮罩与路由历史无绑定关系，依赖请求拦截器在响应阶段自动关闭，不会导致“返回键只退页面、不关弹层”的不一致问题。
-  - 详情页、家庭中心页的返回逻辑均通过 `router.back()` + 回退不到时 `router.push('/')` 实现，避免卡在空历史栈。
+- **Back Navigation and Overlays**
+  - The project does not use component-library Popup/Dialog/Drawer or route-controlled overlays; the only full-screen overlay is the global Loading (`showLoading` in `utils/toast.js`).
+  - Loading is not tied to route history; it is closed in the response phase of the request interceptor, so "back only closes the page, not the overlay" does not occur.
+  - Back behavior on detail and family pages uses `router.back()` with fallback `router.push('/')` when there is no history, avoiding being stuck on an empty stack.
 
-- **安全区（safe-area）适配**
-  - `App.vue` 定义了：
-    - `safe-top`：为顶部导航预留 `env(safe-area-inset-top)`。
-    - `safe-bottom` / `safe-inset-bottom`：为底部固定导航和按钮预留 `env(safe-area-inset-bottom)` 并保证最小底部 padding。
-  - 所有 `fixed` 类型的底部元素（如：
-    - 全局底部导航 `NavBar`，
-    - 详情页底部操作条，
-    - 零浪费页的“分享”按钮等）
-    均已置于带有 `safe-bottom` 或 `safe-inset-bottom` 的容器内，实测不会被 iOS Home 指示条或底部黑边遮挡。
+- **Safe-Area Adaptation**
+  - In `App.vue`:
+    - `safe-top`: reserves `env(safe-area-inset-top)` for the top bar.
+    - `safe-bottom` / `safe-inset-bottom`: reserve `env(safe-area-inset-bottom)` for fixed bottom nav and buttons, with a minimum bottom padding.
+  - All fixed bottom elements (e.g. global bottom nav `NavBar`, detail page action bar, "Share" on the zero-waste page) are inside containers with `safe-bottom` or `safe-inset-bottom`; on device they are not covered by the iOS home indicator or bottom black bar.
 
-- **滚动性能**
-  - `App.vue` 中新增：
+- **Scroll Performance**
+  - In `App.vue`:
     - `body { -webkit-overflow-scrolling: touch; }`
     - `.scroll-touch { -webkit-overflow-scrolling: touch; }`
-  - 这确保了在 iOS 上无论是整页滚动还是未来绑定 `.scroll-touch` 的长列表容器，都能获得原生级的惯性滚动体验。
-  - 现有横向滚动区域（首页风险筛选条、菜谱页标签区、零浪费页勋章列表等）配合 `overflow-x-auto` 与 `no-scrollbar` 已实现顺畅滚动。
+  - This gives native-like inertial scrolling on iOS for both full-page scroll and future long lists using `.scroll-touch`.
+  - Horizontal scroll areas (home risk filter bar, recipe tabs, zero-waste badges, etc.) use `overflow-x-auto` and `no-scrollbar` and scroll smoothly.
 
-### 三、安全性与环境变量
+### 3. Security and Environment Variables
 
-- **硬编码与环境变量**
-  - 代码中未发现任何硬编码的 Token 或敏感鉴权信息；认证 Token 统一通过 `TOKEN_KEY` + `localStorage` 管理。
-  - Vite 开发代理原本将 `/api` 直接指向 `http://localhost:3000`，已优化为：
-    - 使用 `process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000'`；
-    - 便于在 `.env` / 部署环境中覆盖后端地址，避免 IP/端口硬编码进仓库。
-  - 业务代码中的外部 URL 仅为公开图片资源（`googleusercontent` / `via.placeholder.com`），不属于敏感接口或测试 API。
+- **Hardcoding and Environment Variables**
+  - No hardcoded tokens or sensitive auth data were found; auth token is managed via `TOKEN_KEY` and `localStorage`.
+  - The Vite dev proxy previously pointed `/api` to `http://localhost:3000`; it is now:
+    - `process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000'`;
+    - so the backend URL can be overridden in `.env` or deployment without hardcoding IP/port in the repo.
+  - External URLs in code are only for public images (`googleusercontent` / `via.placeholder.com`), not sensitive or test APIs.
 
-- **console/debugger 清理**
-  - 全项目源码中 **无 `console.log` 或 `debugger` 残留**，仅在个别错误分支使用 `console.warn` 打印非敏感信息。
-  - `vite.config.js` 增加了生产构建优化：
+- **console / debugger Cleanup**
+  - **No `console.log` or `debugger`** remain in source; only a few error paths use `console.warn` for non-sensitive messages.
+  - `vite.config.js` production build options:
     - `build.terserOptions.compress.drop_console = true`
     - `build.terserOptions.compress.drop_debugger = true`
-  - 确保上线构建产物中不会包含调试输出或断点语句。
+  - So the production build does not include debug output or breakpoints.
 
-### 四、性能与构建优化
+### 4. Performance and Build Optimization
 
-- **按需加载**
-  - 当前项目未引入 Vant 或其他体积较大的 UI 组件库，仅使用 Tailwind CSS + 原生组件，打包体积相对精简。
-  - 路由级组件均通过 `() => import('...')` 实现懒加载，保证首屏 JS 体积可控。
+- **Lazy Loading**
+  - The project does not use Vant or other large UI libraries; only Tailwind CSS and native components, so bundle size is relatively small.
+  - Route-level components are lazy-loaded via `() => import('...')`, keeping first-screen JS size under control.
 
-- **依赖审计**
-  - `package.json` 中的依赖列表极为精简：
-    - 运行时：`vue`、`vue-router`、`pinia`、`axios`。
-    - 构建链路：`vite`、`@vitejs/plugin-vue`、`tailwindcss`、`postcss`、`autoprefixer`。
-  - 未发现未使用的 UI 库或过期的辅助包，也不存在版本冲突迹象；依赖结构对当前项目规模是合理的。
+- **Dependency Audit**
+  - `package.json` dependencies are minimal:
+    - Runtime: `vue`, `vue-router`, `pinia`, `axios`.
+    - Build: `vite`, `@vitejs/plugin-vue`, `tailwindcss`, `postcss`, `autoprefixer`.
+  - No unused UI libs, outdated helpers, or version conflicts; the set is appropriate for the current project size.
 
-### 五、离线与异常兜底
+### 5. Offline and Error Fallback
 
-- **接口失败与断网提示**
-  - 所有视图在调用 API 时均使用 `try/catch` 包裹，并在 catch 分支中通过 `showToast` 提示用户，如：
-    - 首页统计与风险列表失败 → “加载统计失败”/“加载失败”。
-    - 冰箱页数据拉取失败 → “加载失败”。
-    - 清库菜谱推荐失败 → “加载菜谱失败”。
-    - 扫码识别/保存失败 → “识别失败，请重试”/“保存失败，请重试”。
-    - 详情操作失败 → “操作失败”/“图片优化失败”。
-    - 家庭中心登录/家庭操作失败 → 明确的错误提示文案。
-  - Axios 封装级别对 401/404/5xx/网络异常也做了统一 Toast 处理，相当于全局错误兜底层，避免出现静默的“白屏无反馈”。
+- **API Failure and Offline Messaging**
+  - All views wrap API calls in `try/catch` and use `showToast` in the catch branch, e.g.:
+    - Home stats/risk list failure → "加载统计失败" / "加载失败".
+    - Fridge data failure → "加载失败".
+    - Use-up recipe failure → "加载菜谱失败".
+    - Scan/save failure → "识别失败，请重试" / "保存失败，请重试".
+    - Detail action failure → "操作失败" / "图片优化失败".
+    - Family center login/family action failure → clear error messages.
+  - The Axios layer also handles 401/404/5xx and network errors with a single Toast, acting as a global fallback so users do not see a silent blank screen.
 
-- **空状态展示**
-  - 列表与推荐场景均已覆盖空状态文案，如：
-    - “暂无食物数据”“该区域暂无食物”“当前区域暂无可展示的食物”。
-    - “暂无需要清理的库存食材”“当前食材暂时没有合适的菜谱推荐”。
-  - 提升了在数据为空或请求失败后的可理解性与用户体验。
+- **Empty States**
+  - Lists and recommendation flows have empty-state copy, e.g.:
+    - "暂无食物数据", "该区域暂无食物", "当前区域暂无可展示的食物".
+    - "暂无需要清理的库存食材", "当前食材暂时没有合适的菜谱推荐".
+  - This improves clarity when data is empty or after request failure.
 
 ---
 
-### 关键修复点小结
+### Summary of Key Fixes
 
-1. **Vite 配置强化**：将开发代理的后端地址改为可通过环境变量配置，并在生产构建中开启 `drop_console` / `drop_debugger`，提升安全性与上线质量。
-2. **滚动体验优化**：在全局样式中启用 `-webkit-overflow-scrolling: touch`，保证移动端长列表滚动更顺滑。
-3. **细节样式修复**：修正 `AiFridgeClearingRecipes.vue` 中的 `text白` 拼写错误为 `text-white`，避免出现不可预期的 UI。
-4. **API 文档与实现对齐**：补齐所有 `src/api/*.js` 的 JSDoc，使返回结构与视图使用字段完全一致，为后续维护和二次开发提供清晰依据。
+1. **Vite config**: Dev proxy backend URL is configurable via env; production build enables `drop_console` and `drop_debugger` for security and release quality.
+2. **Scroll UX**: Global `-webkit-overflow-scrolling: touch` for smoother mobile scrolling.
+3. **Style fix**: Corrected `text白` typo to `text-white` in `AiFridgeClearingRecipes.vue` to avoid broken UI.
+4. **API docs vs implementation**: Added JSDoc for all `src/api/*.js` so return shapes match view usage, giving a clear reference for maintenance and further development.
 
-整体来看，项目已经满足移动端上线的交互与性能要求，Vue 代码风格统一，API 设计与实现一致，可作为生产环境的稳定基础版本。
-
+Overall, the project meets mobile release requirements for interaction and performance; Vue style is consistent and API design matches implementation. It is suitable as a stable base for production.

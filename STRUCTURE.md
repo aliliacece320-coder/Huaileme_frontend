@@ -15,7 +15,8 @@ Bad？_v1.1/
 ├── README.md               # 仓库简介（可作 GitHub 描述）
 ├── README_VUE.md           # Vue 项目说明（技术栈、路由、开发命令）
 ├── STRUCTURE.md            # 本文件：项目结构说明
-├── report.md               # 生产前审计报告
+├── REPORT.md               # 生产前审计报告（英文）
+├── REPORT_zh.md            # 生产前审计报告（中文）
 │
 ├── src/                    # 前端源码（Vue 应用）
 ├── public/                 # 静态资源（原样拷贝到构建产物）

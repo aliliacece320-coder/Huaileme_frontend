@@ -116,7 +116,7 @@ src/
 ## 相关文档
 
 - **[STRUCTURE.md](./STRUCTURE.md)** — 完整项目结构说明
-- **[report.md](./report.md)** — 生产前审计与修复小结
+- **[REPORT_zh.md](./REPORT_zh.md)** — 生产前审计与修复小结
 - **API/** — 后端接口文档（`API_SPEC.md`、`API_FOODS.md`、`API_RECIPES.md` 等）
 
 ---
