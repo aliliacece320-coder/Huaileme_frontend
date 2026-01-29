@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>坏了么 - 我的账号与家庭</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script id="tailwind-config">
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#13ec80',
+            background: '#f8fdfb',
+          },
+          fontFamily: {
+            display: ['Noto Sans SC', 'ZCOOL KuaiLe', 'system-ui', 'sans-serif'],
+          },
+          borderRadius: { DEFAULT: '0.75rem', lg: '1.25rem', xl: '1.75rem', full: '9999px' },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      min-height: max(884px, 100dvh);
+      background: radial-gradient(circle at top right, #f0fff4, transparent),
+        radial-gradient(circle at bottom left, #fff5f5, transparent), #f8fdfb;
+      font-family: 'Noto Sans SC', system-ui, sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="/public/api-client.js"></script>
+  <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col">
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-5 py-4 flex items-center justify-between">
+      <button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100" @click="goBack">
+        <span class="material-symbols-outlined text-slate-600">arrow_back_ios_new</span>
+      </button>
+      <h1 class="text-lg font-black tracking-tight">我的账号与家庭</h1>
+      <div class="w-10 h-10"></div>
+    </header>
+
+    <main class="flex-1 px-5 py-4 pb-28 space-y-5">
+      <!-- 登录 / 注册 -->
+      <section class="bg-white/90 rounded-3xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 tracking-widest">登录状态</p>
+            <p class="mt-1 text-base font-bold" v-if="authed">已登录：{{ profile?.username }}</p>
+            <p class="mt-1 text-base font-bold" v-else>当前未登录</p>
+          </div>
+          <span class="material-symbols-outlined text-primary text-2xl" v-if="authed">verified_user</span>
+          <span class="material-symbols-outlined text-slate-300 text-2xl" v-else>lock_open</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-2" v-if="!authed">
+          <input v-model="form.username" type="text" placeholder="用户名" class="text-sm rounded-2xl border-slate-200" />
+          <input v-model="form.password" type="password" placeholder="密码" class="text-sm rounded-2xl border-slate-200" />
+          <button class="col-span-1 h-10 rounded-2xl bg-primary text-white text-sm font-bold flex items-center justify-center gap-1"
+            @click="doLogin">
+            <span class="material-symbols-outlined text-base">login</span> 登录
+          </button>
+          <button class="col-span-1 h-10 rounded-2xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-1"
+            @click="doRegister">
+            <span class="material-symbols-outlined text-base">person_add</span> 注册
+          </button>
+        </div>
+        <div class="mt-3 flex items-center justify-between" v-else>
+          <div class="text-xs text-slate-500">
+            <p>昵称：{{ profile?.displayName || '未设置' }}</p>
+            <p class="mt-0.5">用户 ID：{{ profile?.id }}</p>
+          </div>
+          <button class="h-9 px-4 rounded-full border border-slate-200 text-xs font-bold text-slate-500" @click="logout">
+            退出登录
+          </button>
+        </div>
+      </section>
+
+      <!-- 家庭信息 -->
+      <section class="bg-white/90 rounded-3xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <p class="text-xs font-bold text-slate-400 tracking-widest">当前家庭</p>
+            <p class="mt-1 text-base font-bold" v-if="family">「{{ family.name }}」</p>
+            <p class="mt-1 text-base font-bold" v-else>暂无家庭信息</p>
+          </div>
+          <span class="material-symbols-outlined text-primary text-2xl">diversity_2</span>
+        </div>
+        <div v-if="family" class="text-xs text-slate-500 space-y-1">
+          <p>家庭 ID：{{ family.id }}</p>
+          <p>成员：{{ family.members?.length || 0 }} 人</p>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-2" v-if="authed">
+          <input v-model.number="familyForm.familyId" type="number" placeholder="输入家庭ID加入"
+            class="text-xs rounded-2xl border-slate-200 col-span-2" />
+          <button class="h-9 rounded-2xl bg-primary text-white text-xs font-bold flex items-center justify-center gap-1"
+            @click="joinFamily">
+            <span class="material-symbols-outlined text-sm">meeting_room</span> 加入家庭
+          </button>
+          <button class="h-9 rounded-2xl border border-slate-200 text-xs font-bold text-slate-500 flex items-center justify-center gap-1"
+            @click="leaveFamily">
+            <span class="material-symbols-outlined text-sm">logout</span> 退出当前家庭
+          </button>
+        </div>
+        <p v-else class="text-xs text-slate-400">登录后可查看和管理家庭信息。</p>
+      </section>
+    </main>
+
+    <footer class="fixed bottom-0 left-0 w-full px-5 pb-8 bg-gradient-to-t from-background via-background/95 to-transparent pt-8">
+      <div class="max-w-md mx-auto relative flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-2xl rounded-full border border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.1)]">
+        <div class="flex flex-col items-center gap-1 cursor-pointer" @click="goHome">
+          <span class="material-symbols-outlined text-slate-400 font-bold">home</span>
+          <span class="text-[10px] font-black text-slate-400">首页</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" @click="goStats">
+          <span class="material-symbols-outlined text-[24px]">savings</span>
+          <span class="text-[10px] font-bold">统计</span>
+        </div>
+        <div class="absolute left-1/2 -translate-x-1/2 -top-10">
+          <button class="size-16 rounded-full bg-primary text-white shadow-[0_15px_35px_rgba(19,236,128,0.5)] flex items-center justify-center border-[5px] border-white active:scale-90 transition-all duration-200" onclick="window.location.href='ai_smart_scanner_entry_code.html'" style="cursor: pointer;">
+            <span class="material-symbols-outlined text-3xl font-bold">qr_code_scanner</span>
+          </button>
+          <span class="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 w-max">扫一扫</span>
+        </div>
+        <div class="w-8"></div>
+        <div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='ai_fridge_clearing_recipes_code.html'" style="cursor: pointer;">
+          <span class="material-symbols-outlined text-[24px]">restaurant_menu</span>
+          <span class="text-[10px] font-bold">菜谱</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 text-primary cursor-pointer" style="cursor: pointer;">
+          <span class="material-symbols-outlined text-[24px]" style="font-variation-settings:'FILL' 1">face</span>
+          <span class="text-[10px] font-bold">设置</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className =
+        'fixed top-20 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full text-white text-sm font-bold shadow-lg transition-all transform translate-y-0 opacity-100';
+      const colors = {
+        success: 'bg-primary',
+        error: 'bg-red-500',
+        info: 'bg-blue-500',
+      };
+      toast.classList.add(colors[type] || colors.info);
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.transform = 'translateY(-20px)';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+
+    createApp({
+      setup() {
+        const authed = ref(!!localStorage.getItem('huaileme_auth_token'));
+        const profile = ref(null);
+        const family = ref(null);
+        const form = ref({ username: '', password: '' });
+        const familyForm = ref({ familyId: '' });
+
+        const loadProfileAndFamily = async () => {
+          if (!authed.value) return;
+          try {
+            profile.value = await ApiClient.getUserProfile();
+          } catch (e) {
+            console.warn(e);
+          }
+          try {
+            family.value = await ApiClient.getFamily();
+          } catch (e) {
+            console.warn(e);
+          }
+        };
+
+        const doLogin = async () => {
+          if (!form.value.username || !form.value.password) {
+            showToast('请输入用户名和密码', 'error');
+            return;
+          }
+          try {
+            await ApiClient.login(form.value.username, form.value.password);
+            authed.value = true;
+            showToast('登录成功', 'success');
+            await loadProfileAndFamily();
+          } catch (e) {
+            showToast(e.message || '登录失败', 'error');
+          }
+        };
+
+        const doRegister = async () => {
+          if (!form.value.username || !form.value.password) {
+            showToast('请输入用户名和密码', 'error');
+            return;
+          }
+          try {
+            await ApiClient.register(form.value.username, form.value.password);
+            authed.value = true;
+            showToast('注册并登录成功', 'success');
+            await loadProfileAndFamily();
+          } catch (e) {
+            showToast(e.message || '注册失败', 'error');
+          }
+        };
+
+        const logout = async () => {
+          await ApiClient.logout();
+          authed.value = false;
+          profile.value = null;
+          family.value = null;
+          showToast('已退出登录', 'success');
+        };
+
+        const joinFamily = async () => {
+          if (!familyForm.value.familyId) {
+            showToast('请填写家庭ID', 'error');
+            return;
+          }
+          try {
+            await ApiClient.joinFamily(familyForm.value.familyId);
+            showToast('加入家庭成功', 'success');
+            await loadProfileAndFamily();
+          } catch (e) {
+            showToast(e.message || '加入家庭失败', 'error');
+          }
+        };
+
+        const leaveFamily = async () => {
+          try {
+            await ApiClient.leaveFamily();
+            showToast('已退出当前家庭', 'success');
+            await loadProfileAndFamily();
+          } catch (e) {
+            showToast(e.message || '操作失败', 'error');
+          }
+        };
+
+        const goBack = () => {
+          history.length > 1
+            ? history.back()
+            : (window.location.href = 'huaileme_home_risk_dashboard_code.html');
+        };
+        const goHome = () => {
+          window.location.href = 'huaileme_home_risk_dashboard_code.html';
+        };
+        const goStats = () => {
+          window.location.href = 'zero_waste_statistics_report_code.html';
+        };
+
+        onMounted(() => {
+          loadProfileAndFamily();
+        });
+
+        return {
+          authed,
+          profile,
+          family,
+          form,
+          familyForm,
+          doLogin,
+          doRegister,
+          logout,
+          joinFamily,
+          leaveFamily,
+          goBack,
+          goHome,
+          goStats,
+        };
+      },
+    }).mount('#app');
+  </script>
+</body>
+</html>
+

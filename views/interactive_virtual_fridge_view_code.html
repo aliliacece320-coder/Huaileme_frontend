@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>坏了么 - 我的虚拟小冰箱</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;family=ZCOOL+KuaiLe&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#10b981",
+                        "primary-soft": "#ecfdf5",
+                        "background-light": "#fffcf9",
+                        "background-content": "#ffffff",
+                        "warning": "#f43f5e",
+                        "warning-soft": "#fff1f2",
+                        "caution": "#f59e0b",
+                        "caution-soft": "#fffbeb",
+                        "muted": "#94a3b8"
+                    },
+                    fontFamily: {
+                        "display": ["'Noto Sans SC'", "ui-rounded", "'Hiragino Sans GB'", "'Microsoft YaHei'", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.75rem", "lg": "1.25rem", "xl": "1.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            font-family: 'Noto Sans SC', ui-rounded, 'Hiragino Sans GB', "Microsoft YaHei", sans-serif;
+            background-color: theme('colors.background-light');
+            -webkit-font-smoothing: antialiased;
+        }
+        .fridge-shelf {
+            background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(241,245,249,0.9) 100%);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+            border: 1px solid rgba(0,0,0,0.03);
+        }
+        .glow-green { 
+            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.15); 
+            background-color: theme('colors.primary-soft');
+        }
+        .glow-red { 
+            box-shadow: 0 8px 24px rgba(244, 63, 94, 0.15); 
+            background-color: theme('colors.warning-soft');
+        }
+        .glow-yellow { 
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.12); 
+            background-color: theme('colors.caution-soft');
+        }
+        .rounded-font {
+            font-family: 'Noto Sans SC', ui-rounded, sans-serif;
+        }
+    </style>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+<script src="/public/api-client.js"></script>
+<script>
+let currentZone = 'Cooling';
+let foodsByZone = {};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadFoods();
+  setupEventListeners();
+});
+
+// 加载食物数据
+async function loadFoods() {
+  try {
+    const foods = await ApiClient.getFoods({ status: 'active' });
+    
+    // 按区域分组
+    foodsByZone = {
+      Cooling: foods.filter(f => f.storage_location === '冷藏室' || f.storage_type === '冷藏'),
+      Freezing: foods.filter(f => f.storage_location === '冷冻室' || f.storage_type === '冷冻'),
+      Pantry: foods.filter(f => f.storage_location === '储藏柜' || f.storage_type === '常温')
+    };
+    
+    // 计算统计
+    const totalCount = foods.length;
+    const urgentCount = foods.filter(f => (f.days_left || 0) <= 3).length;
+    const consumedCount = 0; // 从统计API获取
+    
+    // 更新统计显示
+    document.querySelector('.text-4xl').textContent = Math.round((totalCount - urgentCount) / totalCount * 100) || 85;
+    const stats = document.querySelectorAll('.text-xl.font-bold');
+    if (stats[0]) stats[0].textContent = totalCount;
+    if (stats[1]) stats[1].textContent = urgentCount;
+    if (stats[2]) stats[2].textContent = consumedCount;
+    
+    renderZone(currentZone);
+  } catch (error) {
+    console.error('加载食物失败:', error);
+    showToast('加载失败', 'error');
+  }
+}
+
+// 渲染区域
+function renderZone(zone) {
+  const foods = foodsByZone[zone] || [];
+  const zoneNames = {
+    Cooling: '保鲜层',
+    Freezing: '冷冻室',
+    Pantry: '小零食区'
+  };
+  
+  // 渲染食物到对应的冰箱区域
+  renderFoodsToZone(zone, foods);
+  showToast(`已切换到${zoneNames[zone]}`, 'info');
+}
+
+// 渲染食物到冰箱区域
+function renderFoodsToZone(zone, foods) {
+  // 根据区域选择容器
+  let container;
+  if (zone === 'Cooling') {
+    container = document.querySelector('.relative.w-full.h-1\\/3.border-b.border-slate-50');
+  } else if (zone === 'Freezing') {
+    container = document.querySelectorAll('.relative.w-full.h-1\\/3.border-b.border-slate-50')[1];
+  } else {
+    container = document.querySelector('.relative.w-full.h-1\\/3.flex.flex-col.justify-end');
+  }
+  
+  if (!container) return;
+  
+  // 找到食物显示区域（.flex.gap-6 或 .flex.gap-8）
+  const foodDisplay = container.querySelector('.flex.gap-6, .flex.gap-8');
+  if (!foodDisplay) return;
+  
+  // 清空现有食物（保留示例食物结构）
+  const existingItems = foodDisplay.querySelectorAll('.group\\/item');
+  existingItems.forEach(item => {
+    if (item.dataset.foodId) item.remove();
+  });
+  
+  // 渲染前5个食物
+  foods.slice(0, 5).forEach(food => {
+    const daysLeft = food.days_left || 0;
+    let riskClass = 'glow-green';
+    let riskColor = 'primary';
+    let riskText = `还剩${daysLeft}天`;
+    
+    if (daysLeft < 0) {
+      riskClass = 'glow-red';
+      riskColor = 'warning';
+      riskText = '已过期';
+    } else if (daysLeft <= 1) {
+      riskClass = 'glow-red';
+      riskColor = 'warning';
+      riskText = '剩1天啦';
+    } else if (daysLeft <= 3) {
+      riskClass = 'glow-yellow';
+      riskColor = 'caution';
+      riskText = '3天内';
+    }
+    
+    const foodItem = document.createElement('div');
+    foodItem.className = 'group/item relative';
+    foodItem.dataset.foodId = food.id;
+    
+    // 根据风险等级设置颜色类
+    const colorClass = riskColor === 'warning' ? 'warning' : riskColor === 'caution' ? 'caution' : 'primary';
+    const textColorClass = riskColor === 'warning' ? 'text-warning' : riskColor === 'caution' ? 'text-caution' : 'text-primary';
+    const bgColorClass = riskColor === 'warning' ? 'bg-warning' : riskColor === 'caution' ? 'bg-caution' : 'bg-primary';
+    const borderColorClass = riskColor === 'warning' ? 'border-warning/10' : riskColor === 'caution' ? 'border-caution/10' : 'border-primary/10';
+    
+    foodItem.innerHTML = `
+      <div class="w-16 h-16 rounded-full flex items-center justify-center ${riskClass} border ${borderColorClass} transform active:scale-90 transition-transform cursor-pointer" onclick="goToFoodDetail('${food.id}')">
+        <span class="material-symbols-outlined ${textColorClass} text-3xl">${getFoodIcon(food.category)}</span>
+      </div>
+      <span class="absolute -top-1 -right-1 ${bgColorClass} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">${riskText}</span>
+    `;
+    
+    foodDisplay.appendChild(foodItem);
+  });
+  
+  // 更新"新鲜速览"区域
+  updateFreshPreview(foods.slice(0, 2));
+}
+
+// 获取食物图标
+function getFoodIcon(category) {
+  const icons = {
+    '肉类': 'restaurant',
+    '蔬菜': 'nutrition',
+    '水果': 'eco',
+    '奶制品': 'local_drink',
+    '蛋白质': 'egg',
+    '豆制品': 'inventory_2'
+  };
+  return icons[category] || 'lunch_dining';
+}
+
+// 更新新鲜速览
+function updateFreshPreview(foods) {
+  const previewContainer = document.querySelector('.grid.grid-cols-2.gap-4');
+  if (!previewContainer) return;
+  
+  foods.forEach((food, index) => {
+    const previewItem = previewContainer.children[index];
+    if (!previewItem) return;
+    
+    const daysLeft = food.days_left || 0;
+    const riskText = daysLeft <= 1 ? '快喝掉吧' : '非常新鲜';
+    const riskClass = daysLeft <= 1 ? 'text-warning' : 'text-primary';
+    
+    // 更新背景图片
+    if (food.image_url) {
+      previewItem.style.backgroundImage = `linear-gradient(0deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.2) 60%), url('${food.image_url}')`;
+    }
+    
+    // 更新文本
+    const nameEl = previewItem.querySelector('p.text-slate-800');
+    const statusEls = previewItem.querySelectorAll('p');
+    const statusEl = Array.from(statusEls).find(p => p.classList.contains('text-primary') || p.classList.contains('text-warning'));
+    
+    if (nameEl) nameEl.textContent = food.name;
+    if (statusEl) {
+      statusEl.className = `${riskClass} text-[10px] font-bold`;
+      statusEl.textContent = `${riskText} · 剩${daysLeft}天`;
+    }
+  });
+}
+
+// 跳转到食物详情
+window.goToFoodDetail = function(foodId) {
+  window.location.href = `item_details_action_screen_code.html?id=${foodId}`;
+};
+
+// 设置事件监听
+function setupEventListeners() {
+  // 区域切换
+  document.querySelectorAll('input[name="zone"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      currentZone = e.target.value;
+      renderZone(currentZone);
+    });
+  });
+  
+  // 返回首页
+  const homeBtn = Array.from(document.querySelectorAll('.material-symbols-outlined')).find(
+    icon => icon.textContent === 'grid_view'
+  )?.parentElement;
+  if (homeBtn) {
+    homeBtn.addEventListener('click', () => {
+      window.location.href = 'huaileme_home_risk_dashboard_code.html';
+    });
+  }
+  
+  // 找菜谱
+  const recipeBtn = Array.from(document.querySelectorAll('.material-symbols-outlined')).find(
+    icon => icon.textContent === 'restaurant_menu'
+  )?.parentElement;
+  if (recipeBtn) {
+    recipeBtn.addEventListener('click', () => {
+      window.location.href = 'ai_fridge_clearing_recipes_code.html';
+    });
+  }
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full text-white text-sm font-bold shadow-lg transition-all transform translate-y-0 opacity-100`;
+  
+  const colors = {
+    success: 'bg-primary',
+    error: 'bg-red-500',
+    info: 'bg-blue-500'
+  };
+  
+  toast.classList.add(colors[type] || colors.info);
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+</script>
+<header class="sticky top-0 z-50 bg-background-light/90 backdrop-blur-md px-5 py-4 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="bg-primary/10 p-2 rounded-xl">
+<span class="material-symbols-outlined text-primary text-2xl">kitchen</span>
+</div>
+<h1 class="text-xl font-black tracking-tight text-slate-800">坏了么</h1>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-2.5 rounded-full hover:bg-orange-50 text-slate-400 transition-colors">
+<span class="material-symbols-outlined">history</span>
+</button>
+<button class="p-2.5 rounded-full hover:bg-orange-50 text-slate-400 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<main class="flex-1 flex flex-col px-5 pb-32">
+<div class="mt-4 text-center">
+<h2 class="text-slate-800 text-xl font-bold mb-1">我的虚拟小冰箱</h2>
+<h4 class="text-muted text-[11px] font-bold leading-normal tracking-widest uppercase">冰箱保鲜指数</h4>
+<div class="mt-2 text-4xl font-black text-slate-800">85<span class="text-primary text-2xl ml-0.5">%</span></div>
+<div class="mt-6 flex justify-around bg-white/60 border border-orange-100/50 p-5 rounded-3xl shadow-sm">
+<div class="flex flex-col items-center">
+<span class="text-xl font-bold text-slate-800">24</span>
+<span class="text-[11px] text-muted font-medium mt-1">库存宝贝</span>
+</div>
+<div class="w-px h-8 bg-slate-100 self-center"></div>
+<div class="flex flex-col items-center">
+<span class="text-xl font-bold text-warning">2</span>
+<span class="text-[11px] text-muted font-medium mt-1">赶快吃完</span>
+</div>
+<div class="w-px h-8 bg-slate-100 self-center"></div>
+<div class="flex flex-col items-center">
+<span class="text-xl font-bold text-primary">0</span>
+<span class="text-[11px] text-muted font-medium mt-1">光盘行动</span>
+</div>
+</div>
+</div>
+<div class="flex py-6">
+<div class="flex h-12 flex-1 items-center justify-center rounded-2xl bg-slate-100/80 p-1.5">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-xl px-2 has-[:checked]:bg-white has-[:checked]:text-primary has-[:checked]:shadow-sm text-slate-500 text-sm font-bold transition-all">
+<span class="truncate">保鲜层</span>
+<input checked="" class="invisible w-0" name="zone" type="radio" value="Cooling"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-xl px-2 has-[:checked]:bg-white has-[:checked]:text-primary has-[:checked]:shadow-sm text-slate-500 text-sm font-bold transition-all">
+<span class="truncate">冷冻室</span>
+<input class="invisible w-0" name="zone" type="radio" value="Freezing"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-xl px-2 has-[:checked]:bg-white has-[:checked]:text-primary has-[:checked]:shadow-sm text-slate-500 text-sm font-bold transition-all">
+<span class="truncate">小零食区</span>
+<input class="invisible w-0" name="zone" type="radio" value="Pantry"/>
+</label>
+</div>
+</div>
+<div class="flex-1 relative min-h-[440px] rounded-[3rem] bg-white border-[10px] border-slate-50 shadow-2xl shadow-slate-200/50 overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-b from-blue-50/20 to-transparent opacity-40"></div>
+<div class="relative w-full h-1/3 border-b border-slate-50 flex items-end justify-center pb-5 group cursor-pointer">
+<div class="absolute top-3 left-6 text-[11px] text-slate-300 font-bold tracking-wider">保鲜层</div>
+<div class="fridge-shelf w-[88%] h-4 rounded-full absolute bottom-4 opacity-70"></div>
+<div class="flex gap-6 z-10 mb-2">
+<div class="group/item relative">
+<div class="w-16 h-16 rounded-full flex items-center justify-center glow-green border border-primary/10 transform active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-primary text-3xl">local_drink</span>
+</div>
+<span class="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">还剩5天</span>
+</div>
+<div class="group/item relative">
+<div class="w-16 h-16 rounded-full flex items-center justify-center glow-red border border-warning/10 transform active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-warning text-3xl">egg</span>
+</div>
+<span class="absolute -top-1 -right-1 bg-warning text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">剩1天啦</span>
+</div>
+</div>
+<div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/60 backdrop-blur-[2px]">
+<span class="bg-slate-800 text-white text-xs px-5 py-2.5 rounded-full font-bold shadow-xl">戳这里看存货</span>
+</div>
+</div>
+<div class="relative w-full h-1/3 border-b border-slate-50 flex items-end justify-center pb-5 group cursor-pointer">
+<div class="absolute top-3 left-6 text-[11px] text-slate-300 font-bold tracking-wider">冷冻室</div>
+<div class="fridge-shelf w-[90%] h-5 rounded-full absolute bottom-4 opacity-90"></div>
+<div class="flex gap-8 z-10 mb-2">
+<div class="group/item relative">
+<div class="w-18 h-18 rounded-full flex items-center justify-center glow-green border border-primary/10 transform active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-primary text-4xl">eco</span>
+</div>
+<span class="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">还剩7天</span>
+</div>
+<div class="group/item relative translate-y-[-10px]">
+<div class="w-14 h-14 rounded-full flex items-center justify-center glow-yellow border border-caution/10 transform active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-caution text-2xl">nutrition</span>
+</div>
+<span class="absolute -top-1 -right-1 bg-caution text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">3天内</span>
+</div>
+</div>
+<div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/60 backdrop-blur-[2px]">
+<span class="bg-slate-800 text-white text-xs px-5 py-2.5 rounded-full font-bold shadow-xl">戳这里看存货</span>
+</div>
+</div>
+<div class="relative w-full h-1/3 flex flex-col justify-end pb-5 px-6 group cursor-pointer">
+<div class="absolute top-3 left-6 text-[11px] text-slate-300 font-bold tracking-wider">小零食区</div>
+<div class="absolute inset-x-5 bottom-4 h-[75%] bg-slate-50/60 rounded-3xl border border-slate-100"></div>
+<div class="z-10 bg-white/95 backdrop-blur shadow-sm p-4 rounded-2xl border border-slate-100 flex items-center justify-between mb-2">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">lunch_dining</span>
+</div>
+<div>
+<p class="text-xs font-bold text-slate-800 leading-tight">香喷喷的意面</p>
+<p class="text-[10px] text-warning font-bold">明天就到期啦</p>
+</div>
+</div>
+<button class="bg-primary text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-lg shadow-primary/20 active:scale-95 transition-transform">趁热吃掉</button>
+</div>
+</div>
+</div>
+<div class="mt-10">
+<div class="flex items-center justify-between mb-4 px-1">
+<h3 class="text-slate-800 text-lg font-bold">新鲜速览</h3>
+<button class="text-primary text-sm font-bold">去看看全部</button>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="group relative bg-white flex flex-col gap-3 rounded-[1.75rem] justify-end p-4 aspect-[4/3] border border-slate-100 shadow-sm overflow-hidden" style='background-image: linear-gradient(0deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.2) 60%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuCcNHYVEhAIXD_AxyymV3qZ1TDiyy_ChqfMw45NZuFuVlGOK3sF9JYT9VXjwpAvxwEBDUvyD7gumCIijLIOpzTgZNWvPqeeAs_H9FqhL3yoddElUhZWuiY-tuQr4zdvDKsgSs_yaYsJa88vtVWVwPSBFbZQhw3PmnXYoiMnZlQeuPh6knC0yN25I5Qn29fRy3ouM6QOLGBs8lUf26XkXujVdBZ-HPV0E2U1l2DY1HVOcPBOZ22uqDQDEI0-7ESxFuNnG_S2NxMzsLF1"); background-size: cover; background-position: center;'>
+<div>
+<p class="text-slate-800 text-sm font-bold leading-tight">嫩绿菠菜</p>
+<p class="text-primary text-[10px] font-bold">非常新鲜 · 还剩2天</p>
+</div>
+</div>
+<div class="group relative bg-white flex flex-col gap-3 rounded-[1.75rem] justify-end p-4 aspect-[4/3] border border-slate-100 shadow-sm overflow-hidden" style='background-image: linear-gradient(0deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.2) 60%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBipQPGDQVBftEsWorSsxtpYMKDbYXK08S2o4N_ZEmiPWKUmc48HdzghvlfRxPLqcKZ7nKK-_Bh0owc0sAJ-60trR6lGBxKlk3ZlRTBMLWwW9gtQuWkqvscMWsFAl2j2Rd94w6NRBUkBGicfb3W_lyUbMdhl0FqHeHx_X5PW7-nUul9jv8k9F5d8V18PWMjEVRCoJgBUGQQCV6D8ljtpcvuNuS8J8r5jxYiP6x7bLl1WPWjUPyukZuarl3buqQnurpMj3ddNHw2Hin-"); background-size: cover; background-position: center;'>
+<div>
+<p class="text-slate-800 text-sm font-bold leading-tight">全脂纯牛奶</p>
+<p class="text-warning text-[10px] font-bold">快喝掉吧 · 剩1天</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-0 left-0 w-full px-5 pb-8 bg-gradient-to-t from-background-light via-background-light/95 to-transparent pt-12 z-50">
+<div class="max-w-md mx-auto relative flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-2xl rounded-full border border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.1)]">
+<div class="flex flex-col items-center gap-1 cursor-pointer" onclick="window.location.href='huaileme_home_risk_dashboard_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-slate-400 font-bold">home</span>
+<span class="text-[10px] font-black text-slate-400">首页</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='zero_waste_statistics_report_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]">savings</span>
+<span class="text-[10px] font-bold">统计</span>
+</div>
+<div class="absolute left-1/2 -translate-x-1/2 -top-10">
+<button class="size-16 rounded-full bg-primary text-white shadow-[0_15px_35px_rgba(19,236,128,0.5)] flex items-center justify-center border-[5px] border-white active:scale-90 transition-all duration-200" onclick="window.location.href='ai_smart_scanner_entry_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-3xl font-bold">qr_code_scanner</span>
+</button>
+<span class="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 w-max">扫一扫</span>
+</div>
+<div class="w-8"></div> 
+<div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='ai_fridge_clearing_recipes_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]">restaurant_menu</span>
+<span class="text-[11px] font-bold">菜谱</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='user_family_center_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]">face</span>
+<span class="text-[11px] font-bold">设置</span>
+</div>
+</div>
+</div>
+
+</body></html>

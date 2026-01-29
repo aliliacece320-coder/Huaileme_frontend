@@ -1,0 +1,1 @@
+import{r as t}from"./request-8HA-zsBu.js";function e(o={}){return t.get("/foods",{params:o})}function s(o){if(!o)throw new Error("缺少食物 ID");return t.get(`/foods/${encodeURIComponent(o)}`)}function n(o={}){return t.get("/foods/risk/list",{params:o})}function u(){return t.get("/foods/stats/summary")}export{e as a,n as b,s as c,u as g};

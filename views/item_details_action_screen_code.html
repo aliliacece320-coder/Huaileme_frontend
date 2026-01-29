@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>坏了么 - 宝贝详情</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&amp;family=Ma+Shan+Zheng&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec80",
+                        "primary-dark": "#0ccb6d",
+                        "background-light": "#FFFFFF",
+                        "surface-light": "#F8FAF9",
+                        "text-main": "#1A1C1B",
+                        "text-secondary": "#6A6F6D",
+                        "warm-accent": "#FF9F43"
+                    },
+                    fontFamily: {
+                        "display": ["PingFang SC", "Quicksand", "Microsoft YaHei UI", "system-ui", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.75rem",
+                        "lg": "1.25rem",
+                        "xl": "1.75rem",
+                        "2xl": "2.25rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">@layer base {
+            html {
+                font-family: "PingFang SC", "Lantinghei SC", "Hiragino Sans GB", "Microsoft YaHei", "sans-serif";
+            }
+        }
+        .glass-light {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .card-shadow {
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+        }.font-rounded {
+            font-family: "Quicksand", "PingFang SC", "Microsoft YaHei", sans-serif;
+            letter-spacing: -0.01em;
+        }
+    </style>
+<style>
+        body {
+            min-height: max(884px, 100dvh);}
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light font-display text-text-main selection:bg-primary/30">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="/public/api-client.js"></script>
+<script>
+const { createApp, ref, onMounted } = Vue;
+
+createApp({
+  setup() {
+    const currentFood = ref(null);
+    const urlParams = new URLSearchParams(window.location.search);
+    const foodId = urlParams.get('id');
+
+    const renderFoodDetails = (food) => {
+      document.querySelector('h2').textContent = food.name || '宝贝详情';
+
+      const imgContainer = document.querySelector('.h-\\[48vh\\]');
+      if (imgContainer && (food.image_url || food.imageUrl)) {
+        imgContainer.style.backgroundImage = `url('${
+          food.image_url || food.imageUrl
+        }')`;
+      }
+
+      const hoursLeft = food.hours_left ?? food.hoursLeft ?? 0;
+      const daysLeft = Math.floor(hoursLeft / 24);
+      const hours = hoursLeft % 24;
+      const timeText =
+        daysLeft > 0
+          ? `还能陪你 ${daysLeft} 天`
+          : `还能陪你 ${hours} 小时`;
+      const h1 = document.querySelector('h1');
+      if (h1) h1.textContent = timeText;
+
+      const freshness =
+        food.freshness_percentage ?? food.freshnessPercentage ?? 0;
+      const freshnessEl = document.querySelector('.text-4xl');
+      if (freshnessEl) freshnessEl.textContent = `${freshness}%`;
+
+      const circle = document.querySelector('circle[stroke-dasharray]');
+      if (circle) {
+        const circumference = 2 * Math.PI * 28;
+        const offset = circumference - (freshness / 100) * circumference;
+        circle.style.strokeDashoffset = offset;
+      }
+
+      const locationEl = Array.from(document.querySelectorAll('p')).find((p) =>
+        p.textContent.includes('它住在这里'),
+      );
+      if (locationEl) {
+        locationEl.nextElementSibling.textContent = `${
+          food.storage_location || ''
+        } - ${food.category || '未分类'}`;
+      }
+
+      const dateEl = Array.from(document.querySelectorAll('p')).find((p) =>
+        p.textContent.includes('相遇的日子'),
+      );
+      if (dateEl && food.added_date) {
+        const date = new Date(food.added_date);
+        dateEl.nextElementSibling.textContent = `${date.getFullYear()}年${
+          date.getMonth() + 1
+        }月${date.getDate()}日`;
+      }
+    };
+
+    const loadFoodDetails = async () => {
+      if (!foodId) {
+        showToast('食物ID不存在', 'error');
+        setTimeout(
+          () => (window.location.href = 'huaileme_home_risk_dashboard_code.html'),
+          2000,
+        );
+        return;
+      }
+      try {
+        showLoading('加载中...');
+        const food = await ApiClient.getFood(foodId);
+        currentFood.value = food;
+        renderFoodDetails(food);
+        hideLoading();
+      } catch (e) {
+        console.error(e);
+        hideLoading();
+        showToast('加载失败', 'error');
+        setTimeout(
+          () => (window.location.href = 'huaileme_home_risk_dashboard_code.html'),
+          2000,
+        );
+      }
+    };
+
+    const performAction = async (action, rating = null) => {
+      if (!currentFood.value) return;
+      const actionType = action === 'consume' ? 'consume' : 'waste';
+      try {
+        showLoading('处理中...');
+        await ApiClient.performFoodAction(foodId, actionType, rating);
+        hideLoading();
+        const messages = {
+          consume: '已标记为已消费！',
+          waste: '已标记为已浪费',
+        };
+        showToast(messages[actionType] || '操作成功', 'success');
+        setTimeout(
+          () => (window.location.href = 'huaileme_home_risk_dashboard_code.html'),
+          1500,
+        );
+      } catch (e) {
+        console.error(e);
+        hideLoading();
+        showToast('操作失败', 'error');
+      }
+    };
+
+    const optimizeImage = async () => {
+      if (!currentFood.value || !(currentFood.value.image_url || currentFood.value.imageUrl)) {
+        showToast('暂无可优化的图片', 'error');
+        return;
+      }
+      try {
+        showLoading('图片优化中...');
+        const result = await ApiClient.optimizeImage({
+          imageUrl: currentFood.value.image_url || currentFood.value.imageUrl,
+          foodId,
+        });
+        hideLoading();
+        if (result?.optimizedImageUrl) {
+          currentFood.value.image_url = result.optimizedImageUrl;
+          renderFoodDetails(currentFood.value);
+          showToast('图片已优化', 'success');
+        } else {
+          showToast('未返回优化结果', 'info');
+        }
+      } catch (e) {
+        hideLoading();
+        showToast('图片优化失败', 'error');
+      }
+    };
+
+    onMounted(() => {
+      loadFoodDetails();
+
+      const backBtn = Array.from(
+        document.querySelectorAll('.material-symbols-outlined'),
+      ).find((icon) => icon.textContent === 'arrow_back_ios_new')?.parentElement;
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          window.location.href = 'huaileme_home_risk_dashboard_code.html';
+        });
+      }
+
+      const eatBtn = Array.from(document.querySelectorAll('button')).find((btn) =>
+        btn.textContent.includes('吃掉啦'),
+      );
+      if (eatBtn) {
+        eatBtn.addEventListener('click', () => performAction('consume', 4));
+      }
+
+      const wasteBtn = Array.from(document.querySelectorAll('button')).find(
+        (btn) => btn.textContent.includes('忍痛扔掉'),
+      );
+      if (wasteBtn) {
+        wasteBtn.addEventListener('click', () => {
+          if (confirm('确定要扔掉这个食物吗？')) {
+            performAction('waste');
+          }
+        });
+      }
+
+      const shareBtn = Array.from(document.querySelectorAll('button')).find(
+        (btn) => btn.textContent.includes('送给邻居'),
+      );
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          // 分享行为前端提示即可，不更改后端状态
+          showToast('已记录：送给邻居', 'success');
+        });
+      }
+
+      const optimizeBtn = Array.from(document.querySelectorAll('button')).find(
+        (btn) => btn.querySelector('.material-symbols-outlined')?.textContent === 'auto_fix_high',
+      );
+      if (optimizeBtn) {
+        optimizeBtn.addEventListener('click', optimizeImage);
+      }
+    });
+
+    window._foodDetail = { performAction, optimizeImage };
+
+    return {};
+  },
+}).mount(document.body);
+
+// 显示加载状态
+function showLoading(message) {
+  let loader = document.getElementById('loading-overlay');
+  if (!loader) {
+    loader = document.createElement('div');
+    loader.id = 'loading-overlay';
+    loader.className = 'fixed inset-0 bg-black/50 z-[200] flex items-center justify-center';
+    document.body.appendChild(loader);
+  }
+  loader.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 flex flex-col items-center gap-4">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <p class="text-text-main font-bold">${message}</p>
+    </div>
+  `;
+}
+
+function hideLoading() {
+  const loader = document.getElementById('loading-overlay');
+  if (loader) loader.remove();
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full text-white text-sm font-bold shadow-lg transition-all transform translate-y-0 opacity-100`;
+  
+  const colors = {
+    success: 'bg-primary',
+    error: 'bg-red-500',
+    info: 'bg-blue-500'
+  };
+  
+  toast.classList.add(colors[type] || colors.info);
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+</script>
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<div class="fixed top-0 z-50 flex w-full items-center justify-between p-4">
+<div class="flex size-10 items-center justify-center rounded-full glass-light shadow-sm">
+<span class="material-symbols-outlined text-text-main text-[20px]">arrow_back_ios_new</span>
+</div>
+<h2 class="text-text-main text-lg font-bold tracking-tight">宝贝详情</h2>
+<div class="flex size-10 items-center justify-center rounded-full glass-light shadow-sm">
+<span class="material-symbols-outlined text-text-main">more_horiz</span>
+</div>
+</div>
+<div class="relative h-[48vh] w-full bg-white">
+<div class="h-full w-full bg-cover bg-center" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBZiPWW4O7LNWoZmONFo2Ijs-fLb_M9doEJL3ccAYVMc4GQyXdvKAj2zgnYHM9vb72C_RIPa_Mjrdgj-h10GR5JmBf04_O34TsxAgTDErxpuFTsK-j87uKbAtyYitDWeFi-oPFQGWwUOpBXzelzK6IoRRZrdUT_yrLWvyhgSqz0NgcPWgP4H6VHg3xsMFSB3a9yHkZ2WmIYQExpx6g0YbtC-RoElW5zYlZR9Uq9aF6LoqTEvinS88jIPltNxAQsa8DUPbgJiJBAt64r");'>
+</div>
+<div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/40 to-transparent"></div>
+<div class="absolute bottom-6 left-4 right-4">
+<div class="bg-white/95 backdrop-blur-md flex items-center justify-between p-5 rounded-2xl shadow-xl border border-black/5">
+<div class="flex flex-col">
+<span class="text-primary-dark text-xs font-bold uppercase tracking-widest">时光在流逝</span>
+<h1 class="text-2xl font-extrabold mt-1 text-text-main">还能陪你 48 小时</h1>
+</div>
+<div class="relative flex items-center justify-center size-16">
+<svg class="size-full -rotate-90">
+<circle class="text-gray-100" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" stroke-width="5"></circle>
+<circle class="text-primary" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" stroke-dasharray="175.9" stroke-dashoffset="44" stroke-linecap="round" stroke-width="5"></circle>
+</svg>
+<span class="absolute text-xs font-bold text-text-main">75%</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 px-4 pb-44 bg-white rounded-t-[32px] -mt-4 relative z-10">
+<div class="grid grid-cols-2 gap-3 mt-8">
+<div class="bg-surface-light p-4 rounded-2xl border border-gray-100 card-shadow">
+<div class="bg-primary/10 size-8 rounded-lg flex items-center justify-center mb-3 text-primary-dark">
+<span class="material-symbols-outlined text-xl">home_pin</span>
+</div>
+<p class="text-text-secondary text-xs">它住在这里</p>
+<p class="font-bold text-text-main">冰箱 - 第一层</p>
+</div>
+<div class="bg-surface-light p-4 rounded-2xl border border-gray-100 card-shadow">
+<div class="bg-primary/10 size-8 rounded-lg flex items-center justify-center mb-3 text-primary-dark">
+<span class="material-symbols-outlined text-xl">favorite</span>
+</div>
+<p class="text-text-secondary text-xs">相遇的日子</p>
+<p class="font-bold text-text-main">2023年10月24日</p>
+</div>
+</div>
+<div class="mt-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-text-main text-xl font-extrabold tracking-tight">宝贝新鲜度</h3>
+<span class="text-primary-dark text-[10px] font-bold bg-primary/10 px-2 py-1 rounded-full uppercase tracking-wider">小助手预测</span>
+</div>
+<div class="bg-surface-light p-6 rounded-2xl border border-gray-100 card-shadow">
+<div class="flex items-baseline gap-2 mb-4">
+<span class="text-4xl font-extrabold text-text-main tracking-tighter">90%</span>
+<span class="text-red-500 text-sm font-semibold">变淡了一点点</span>
+</div>
+<div class="relative h-44 w-full mt-4">
+<svg fill="none" height="100%" preserveAspectRatio="none" viewBox="0 0 472 150" width="100%" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 20C50 20 100 45 150 45C200 45 250 80 300 80C350 80 400 120 450 120C460 120 472 125 472 125V150H0V20Z" fill="url(#grad1)"></path>
+<path d="M0 20C50 20 100 45 150 45C200 45 250 80 300 80C350 80 400 120 450 120" stroke="#13ec80" stroke-linecap="round" stroke-width="4"></path>
+<defs>
+<linearGradient id="grad1" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#13ec80" stop-opacity="0.15"></stop>
+<stop offset="100%" stop-color="#13ec80" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+</svg>
+<div class="flex justify-between mt-4 text-text-secondary text-[11px] font-bold tracking-widest">
+<span>今天</span>
+<span>周三</span>
+<span>周四</span>
+<span>周五</span>
+<span>周六</span>
+</div>
+</div>
+<div class="mt-6 flex gap-3 items-start bg-white p-3 rounded-xl border border-gray-100">
+<span class="material-symbols-outlined text-primary-dark text-lg mt-0.5">sentiment_satisfied</span>
+<p class="text-sm text-text-secondary leading-relaxed italic">
+                        这儿有点潮湿，把它挪到干爽的地方会更开心哦。
+                    </p>
+</div>
+</div>
+</div>
+<div class="mt-6 bg-surface-light p-4 rounded-2xl border border-gray-100 flex items-center justify-between card-shadow">
+<div class="flex items-center gap-3">
+<div class="flex -space-x-3">
+<div class="size-9 rounded-full border-2 border-white bg-gray-200 overflow-hidden" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBH6i5Sb31xSjulakBl_-0IIwcRV8IdVp5bsQmb3Va7SA0Ht3R1_pTNcpiMHzk-degDEkB2dJIbUK6y6M2jXrsPGXX3yVlsehSs3s4582rgJQH-v2SOi-8ng1_835_Tl_r7VV_G7r6CZ_LvmI6SNCRTU2usrm5wECIFUZsIuubIsvFdSi8WMknDxrMynT74_0nC32E7L2eAO6OSBj5XtusEO1YsedAwnqhygsNfqR548HtvJ6zDoiQLSQbdrmnJVNanHBzrHCkqIJef"); background-size: cover;'></div>
+<div class="size-9 rounded-full border-2 border-white bg-gray-300 overflow-hidden" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAMpP3Ue1BFrALRzScHEzmEcm2tLWzr3qc5qrBYkQrwVHXqNClMn6dHGIFAyXuD89JPT9MR211wK_q5A84UStDpZPaF-UC4a5MTj8fy3bppUTO-mfYZBoZ1QNdwlIrKh_vQuq9KIpc8W0a0WFgoxURuLlf9hq9ZN_F5CRFnXqCcm6re3LcDiJqgZ453zOk4lxZWt11_LnTAg37PMOneU2Pg3odakbMX2FKNEYn1EEp6gXPDXQjahdWohVTZoTa6_W_g5uo8bF_2Cevd"); background-size: cover;'></div>
+<div class="size-9 rounded-full border-2 border-white bg-primary-dark flex items-center justify-center text-[10px] text-white font-bold tracking-tighter">+3位</div>
+</div>
+<p class="text-sm font-semibold text-text-main">邻居也想尝尝</p>
+</div>
+<button class="border-2 border-primary text-primary-dark px-4 py-2 rounded-xl text-sm font-bold active:bg-primary/10 transition-colors">送给邻居</button>
+</div>
+</div>
+<div class="fixed bottom-0 left-0 right-0 p-6 pt-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
+<p class="text-center text-[11px] font-bold text-text-secondary mb-4 tracking-[0.2em] uppercase">它的最后归宿</p>
+<div class="flex gap-3">
+<button class="flex-[1.2] bg-primary text-text-main h-14 rounded-2xl font-bold flex flex-col items-center justify-center transition-transform active:scale-95 shadow-lg shadow-primary/20">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] font-bold">celebration</span>
+                    吃掉啦
+                </span>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="text-[9px] font-medium opacity-70">吃后感:</span>
+<div class="flex gap-0.5">
+<span class="material-symbols-outlined text-[10px] fill-1 text-text-main">star</span>
+<span class="material-symbols-outlined text-[10px] fill-1 text-text-main">star</span>
+<span class="material-symbols-outlined text-[10px] fill-1 text-text-main">star</span>
+<span class="material-symbols-outlined text-[10px] fill-1 text-text-main">star</span>
+<span class="material-symbols-outlined text-[10px] fill-1 text-text-main/20">star</span>
+</div>
+</div>
+</button>
+<button class="flex-1 border-2 border-gray-100 bg-white h-14 rounded-2xl font-bold flex items-center justify-center gap-2 text-red-400 active:bg-gray-50 transition-colors">
+<span class="material-symbols-outlined text-red-400 text-[20px]">heart_broken</span>
+                忍痛扔掉
+            </button>
+<button class="size-14 bg-surface-light border border-gray-100 rounded-2xl flex items-center justify-center text-text-main active:bg-gray-100">
+<span class="material-symbols-outlined">auto_fix_high</span>
+</button>
+</div>
+<div class="w-32 h-1.5 bg-gray-200 rounded-full mx-auto mt-6 mb-1"></div>
+</div>
+</div>
+
+</body></html>

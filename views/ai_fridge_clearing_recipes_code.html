@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI 消灭库存菜谱 (圆体中文版)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2ee585",
+                        "background-light": "#ffffff",
+                        "surface": "#f8faf9",
+                        "text-main": "#1a1c1b",
+                        "text-muted": "#64746b",
+                    },
+                    fontFamily: {
+                        "display": ["Quicksand", "PingFang SC", "STHeitiTC-Light", "Microsoft YaHei", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap');
+        :root {--font-rounded: "Quicksand", "PingFang SC", "YuAnti", "Hiragino Sans GB", "Microsoft YaHei", "sans-serif";
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        body {
+            min-height: max(884px, 100dvh);
+            background-color: #ffffff;
+            font-family: var(--font-rounded);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }h1, h2, h3, h4, p, span, button {
+            letter-spacing: -0.01em;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-text-main">
+<script src="/public/api-client.js"></script>
+<script>
+let selectedFoodIds = [];
+let currentRecipes = [];
+let availableFoods = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadUrgentFoods();
+  setupEventListeners();
+});
+
+// 加载急需消灭的食物
+async function loadUrgentFoods() {
+  try {
+    showLoading('加载中...');
+    const foods = await ApiClient.getFoods({ status: 'active' });
+    // 筛选出快过期的食物（3天内）
+    const urgentFoods = foods.filter(food => {
+      const daysLeft = food.days_left || 0;
+      return daysLeft >= 0 && daysLeft <= 3;
+    });
+    availableFoods = urgentFoods;
+    renderFoodList(urgentFoods);
+    hideLoading();
+    
+    if (urgentFoods.length > 0) {
+      // 自动选择前两个
+      selectedFoodIds = urgentFoods.slice(0, 2).map(f => f.id);
+      updateFoodSelection();
+      await loadRecipes();
+    } else {
+      showToast('没有快过期的食物', 'info');
+    }
+  } catch (error) {
+    console.error('加载食物失败:', error);
+    hideLoading();
+    showToast('加载失败', 'error');
+  }
+}
+
+// 渲染食物列表
+function renderFoodList(foods) {
+  const container = document.querySelector('#food-selection-container');
+  if (!container) {
+    // 如果容器不存在，创建它
+    const parent = document.querySelector('.flex.gap-2.5.px-5.py-4');
+    if (parent) {
+      parent.innerHTML = '';
+      parent.id = 'food-selection-container';
+    }
+  }
+  
+  const parent = document.getElementById('food-selection-container') || 
+                 document.querySelector('.flex.gap-2.5.px-5.py-4');
+  if (!parent) return;
+  
+  parent.innerHTML = foods.map(food => {
+    const daysLeft = food.days_left || 0;
+    const isSelected = selectedFoodIds.includes(food.id);
+    const daysText = daysLeft === 0 ? '今日到期' : `${daysLeft}天后过期`;
+    
+    return `
+      <div class="food-item flex h-11 shrink-0 items-center gap-x-2 rounded-2xl px-4 shadow-lg transition-transform active:scale-95 cursor-pointer ${
+        isSelected ? 'bg-primary text-white' : 'bg-surface border border-gray-100 text-text-muted'
+      }" data-food-id="${food.id}">
+        <span class="material-symbols-outlined text-[20px]">${getFoodIcon(food.category)}</span>
+        <p class="text-sm font-bold">${food.name} (${daysText})</p>
+        ${isSelected ? '<span class="material-symbols-outlined text-[18px] fill-1">check_circle</span>' : ''}
+      </div>
+    `;
+  }).join('');
+  
+  // 绑定点击事件
+  parent.querySelectorAll('.food-item').forEach(item => {
+    item.addEventListener('click', () => toggleFoodSelection(item.dataset.foodId));
+  });
+}
+
+// 切换食物选择
+function toggleFoodSelection(foodId) {
+  const index = selectedFoodIds.indexOf(foodId);
+  if (index > -1) {
+    selectedFoodIds.splice(index, 1);
+  } else {
+    selectedFoodIds.push(foodId);
+  }
+  updateFoodSelection();
+  loadRecipes();
+}
+
+// 更新食物选择状态
+function updateFoodSelection() {
+  document.querySelectorAll('.food-item').forEach(item => {
+    const foodId = item.dataset.foodId;
+    if (selectedFoodIds.includes(foodId)) {
+      item.classList.remove('bg-surface', 'border', 'border-gray-100', 'text-text-muted');
+      item.classList.add('bg-primary', 'text-white');
+      if (!item.querySelector('.material-symbols-outlined.fill-1')) {
+        const check = document.createElement('span');
+        check.className = 'material-symbols-outlined text-[18px] fill-1';
+        check.textContent = 'check_circle';
+        item.appendChild(check);
+      }
+    } else {
+      item.classList.remove('bg-primary', 'text-white');
+      item.classList.add('bg-surface', 'border', 'border-gray-100', 'text-text-muted');
+      const check = item.querySelector('.material-symbols-outlined.fill-1');
+      if (check) check.remove();
+    }
+  });
+}
+
+// 获取食物图标
+function getFoodIcon(category) {
+  const icons = {
+    '肉类': 'restaurant',
+    '蔬菜': 'nutrition',
+    '水果': 'eco',
+    '奶制品': 'local_drink',
+    '蛋白质': 'egg',
+    '豆制品': 'inventory_2'
+  };
+  return icons[category] || 'restaurant';
+}
+
+// 加载推荐菜谱
+async function loadRecipes() {
+  if (selectedFoodIds.length === 0) {
+    document.getElementById('recipes-container').innerHTML = '<p class="text-center text-text-muted py-8">请先选择食物</p>';
+    return;
+  }
+  
+  try {
+    showLoading('AI正在推荐菜谱...');
+    const recipes = await ApiClient.getRecipeRecommendations(selectedFoodIds);
+    currentRecipes = recipes;
+    renderRecipes(recipes);
+    hideLoading();
+    showToast(`为您推荐了 ${recipes.length} 道菜`, 'success');
+  } catch (error) {
+    console.error('加载菜谱失败:', error);
+    hideLoading();
+    showToast('加载菜谱失败', 'error');
+  }
+}
+
+// 渲染菜谱列表
+function renderRecipes(recipes) {
+  const container = document.getElementById('recipes-container');
+  if (!container) {
+    const parent = document.querySelector('.flex.flex-col.gap-5.p-5.pb-32');
+    if (parent) {
+      parent.innerHTML = '<div id="recipes-container"></div>';
+    }
+  }
+  
+  const recipesContainer = document.getElementById('recipes-container');
+  if (!recipesContainer) return;
+  
+  recipesContainer.innerHTML = recipes.map((recipe, index) => `
+    <div class="glass-card rounded-[2.5rem] overflow-hidden flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60">
+      <div class="relative h-56 w-full bg-center bg-cover" style="background-image: url('${recipe.image_url}');">
+        <div class="absolute top-4 left-4 bg-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-primary/30">
+          <span class="material-symbols-outlined text-[14px] font-bold">favorite</span> 适配度 ${recipe.match_score}%
+        </div>
+      </div>
+      <div class="p-5 flex flex-col gap-4">
+        <div>
+          <h4 class="text-text-main text-xl font-bold">${recipe.name}</h4>
+          <div class="flex gap-4 mt-2">
+            <span class="text-text-muted text-xs font-bold flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px] text-primary">schedule</span> ${recipe.cooking_time} 分钟
+            </span>
+            <span class="text-text-muted text-xs font-bold flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px] text-primary">sentiment_satisfied</span> ${recipe.difficulty}
+            </span>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] text-primary font-bold uppercase tracking-wider">还要准备：</span>
+          <p class="text-text-muted text-sm leading-relaxed">${recipe.description}</p>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <div class="flex -space-x-2.5">
+            ${recipe.ingredients.map(ing => `
+              <div class="w-9 h-9 rounded-full border-2 border-white bg-primary/20 flex items-center justify-center shadow-sm">
+                <span class="material-symbols-outlined text-[18px] text-primary">${getFoodIcon(ing)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <button class="complete-recipe-btn bg-primary hover:bg-primary/90 text-white px-6 h-12 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 transition-all active:scale-95" data-recipe-id="${recipe.id}">
+            <span class="material-symbols-outlined text-[20px]">check</span>
+            我做完了
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  
+  // 绑定完成按钮
+  recipesContainer.querySelectorAll('.complete-recipe-btn').forEach(btn => {
+    btn.addEventListener('click', () => completeRecipe(btn.dataset.recipeId));
+  });
+}
+
+// 完成菜谱
+async function completeRecipe(recipeId) {
+  if (selectedFoodIds.length === 0) {
+    showToast('请先选择食物', 'error');
+    return;
+  }
+  
+  try {
+    showLoading('正在保存...');
+    await ApiClient.completeRecipe(recipeId, selectedFoodIds);
+    hideLoading();
+    showToast('菜谱完成！食物已标记为已消费', 'success');
+    
+    // 清空选择，重新加载
+    selectedFoodIds = [];
+    setTimeout(async () => {
+      await loadUrgentFoods();
+    }, 1500);
+  } catch (error) {
+    console.error('完成菜谱失败:', error);
+    hideLoading();
+    showToast('操作失败', 'error');
+  }
+}
+
+// 设置事件监听
+function setupEventListeners() {
+  // 全选按钮
+  const selectAllBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.includes('全选')
+  );
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      if (selectedFoodIds.length === availableFoods.length) {
+        selectedFoodIds = [];
+      } else {
+        selectedFoodIds = availableFoods.map(f => f.id);
+      }
+      updateFoodSelection();
+      loadRecipes();
+    });
+  }
+  
+  // 换一批按钮
+  const refreshBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.includes('换一批灵感')
+  );
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      loadRecipes();
+    });
+  }
+  
+  // 返回按钮
+  const backBtn = document.querySelector('.material-symbols-outlined')?.parentElement;
+  if (backBtn && backBtn.textContent.includes('chevron_left')) {
+    backBtn.addEventListener('click', () => {
+      window.location.href = 'huaileme_home_risk_dashboard_code.html';
+    });
+  }
+}
+
+// 显示加载状态
+function showLoading(message) {
+  let loader = document.getElementById('loading-overlay');
+  if (!loader) {
+    loader = document.createElement('div');
+    loader.id = 'loading-overlay';
+    loader.className = 'fixed inset-0 bg-black/50 z-[200] flex items-center justify-center';
+    document.body.appendChild(loader);
+  }
+  loader.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 flex flex-col items-center gap-4">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <p class="text-text-main font-bold">${message}</p>
+    </div>
+  `;
+}
+
+function hideLoading() {
+  const loader = document.getElementById('loading-overlay');
+  if (loader) loader.remove();
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full text-white text-sm font-bold shadow-lg transition-all transform translate-y-0 opacity-100`;
+  
+  const colors = {
+    success: 'bg-primary',
+    error: 'bg-red-500',
+    info: 'bg-blue-500'
+  };
+  
+  toast.classList.add(colors[type] || colors.info);
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+</script>
+<div class="max-w-[480px] mx-auto min-h-screen flex flex-col bg-background-light shadow-sm relative">
+<div class="sticky top-0 z-50 bg-white/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
+<div class="flex items-center justify-center w-10 h-10 -ml-2">
+<span class="material-symbols-outlined text-[28px] text-text-main">chevron_left</span>
+</div>
+<div class="flex flex-col items-center">
+<h2 class="text-text-main text-lg font-bold leading-tight">坏了么</h2>
+<div class="flex items-center gap-1">
+<span class="size-1.5 rounded-full bg-primary"></span>
+<p class="text-[10px] text-primary font-bold tracking-[0.05em]">AI 智能清库</p>
+</div>
+</div>
+<div class="flex items-center justify-center w-10 h-10 -mr-2">
+<button class="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-[22px]">auto_fix_high</span>
+</button>
+</div>
+</div>
+<div class="px-5 pt-6 pb-2">
+<div class="flex justify-between items-center">
+<h3 class="text-text-main text-2xl font-bold tracking-tight">消灭库存大作战</h3>
+<button class="text-primary text-sm font-bold px-2 py-1">全选</button>
+</div>
+<p class="text-text-muted text-sm mt-1">选几个快坏掉的，AI 帮你变美味</p>
+</div>
+<div id="food-selection-container" class="flex gap-2.5 px-5 py-4 overflow-x-auto no-scrollbar">
+<!-- 食物列表将通过JavaScript动态加载 -->
+</div>
+<div class="px-5 pt-4 pb-2 flex items-center gap-2.5">
+<div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[20px]">temp_preferences_custom</span>
+</div>
+<h3 class="text-text-main text-lg font-bold">这几道菜最合适：</h3>
+</div>
+<div class="flex flex-col gap-5 p-5 pb-32">
+<div id="recipes-container">
+<!-- 菜谱列表将通过JavaScript动态加载 -->
+</div>
+<div class="relative h-56 w-full bg-center bg-cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBTSrwK-bwMFiMgaUXUrJqhBBtMpqudrjWWzf0o1hinPRL8JqK-c16fu4F4iCDGT-RXT3RA4ldTS1hWXCffjTQXlv2AmgfrilOovppm5IeWb3FBDSo6VvNQ27V9pLALet_BpvUpZELJN53jS2FrgmDlgUXSPY4Z1GfFHWSY_P4vfpFE_W3VQ8LavLhfYjvLa2kRJyR92NtqacrOgQTfcgjEU5fKlr9Ls4qVyXyxJT8G3ivPLdyPJ46axcW915iEFBitnaa_Xf_e4esn");'>
+<div class="absolute top-4 left-4 bg-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-primary/30">
+<span class="material-symbols-outlined text-[14px] font-bold">favorite</span> 适配度 95%
+                    </div>
+</div>
+<div class="p-5 flex flex-col gap-4">
+<div>
+<h4 class="text-text-main text-xl font-bold">超下饭家常炖牛肉</h4>
+<div class="flex gap-4 mt-2">
+<span class="text-text-muted text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">schedule</span> 45 分钟
+                            </span>
+<span class="text-text-muted text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">sentiment_satisfied</span> 简单易上手
+                            </span>
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<span class="text-[11px] text-primary font-bold uppercase tracking-wider">还要准备：</span>
+<p class="text-text-muted text-sm leading-relaxed">库存已含 牛肉、西红柿。只需要再准备一点 姜片 和 葱花 就可以啦。</p>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex -space-x-2.5">
+<div class="w-9 h-9 rounded-full border-2 border-white bg-primary/20 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">restaurant</span>
+</div>
+<div class="w-9 h-9 rounded-full border-2 border-white bg-primary/20 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">nutrition</span>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-white px-6 h-12 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">check</span>
+                            我做完了
+                        </button>
+</div>
+</div>
+</div>
+<div class="glass-card rounded-[2.5rem] overflow-hidden flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60">
+<div class="relative h-56 w-full bg-center bg-cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBpsxsk7AQi5GHLcW-zZlJ0SUZG-Feg_mhXgMeThlodeSm-p_dMkkqXAJAgFhCqE3AXEdLWoN6-qpqwAsHYO6wlGSVpTFAS-fU2ZBpBKs274WCawbHsbLOrohvInMQxFe15dQqKj-AJVONgYY2CnlNJpF2DonifF1MKoEn8G09sOhiVCoitWrcMoKyImVBbpxYbsGK3PlivdiYZTsKL8Gv_eBz04JRzyyQtVuXqgGr63Kwg-iRexSVhuOO-aikT3Ex2z3rIXB6aOpmE");'>
+<div class="absolute top-4 left-4 bg-white/90 backdrop-blur-md text-text-main px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm border border-white">
+<span class="material-symbols-outlined text-[14px] text-primary font-bold">favorite</span> 适配度 82%
+                    </div>
+</div>
+<div class="p-5 flex flex-col gap-4">
+<div>
+<h4 class="text-text-main text-xl font-bold">番茄牛肉滑蛋</h4>
+<div class="flex gap-4 mt-2">
+<span class="text-text-muted text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">schedule</span> 20 分钟
+                            </span>
+<span class="text-text-muted text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">bolt</span> 极速出锅
+                            </span>
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<span class="text-[11px] text-primary font-bold uppercase tracking-wider">还要准备：</span>
+<p class="text-text-muted text-sm leading-relaxed">库存已含 牛肉、西红柿。再加 2个鸡蛋 就能享受完美的一餐。</p>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex -space-x-2.5">
+<div class="w-9 h-9 rounded-full border-2 border-white bg-primary/20 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">restaurant</span>
+</div>
+<div class="w-9 h-9 rounded-full border-2 border-white bg-primary/20 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">nutrition</span>
+</div>
+</div>
+<button class="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 px-6 h-12 rounded-full text-sm font-bold flex items-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">check</span>
+                            我做完了
+                        </button>
+</div>
+</div>
+</div>
+<div class="glass-card rounded-[2rem] overflow-hidden flex items-center p-4 gap-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-white/60">
+<div class="size-20 rounded-2xl bg-center bg-cover shrink-0 shadow-sm" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBVJHewsWtqz9fvpYsO7vqZvhT0PEaGGcscWiPeQQX1IyHMVDq4egaLhn-u4Jiv2e2yAcRuDqkxQrKqhbvUnQY4UnU0jte51Cby4A_VdrpLQPpp_EIsdZJbRTS2U5UJR395HQZS7A-7deMvH9uMArLSUmVgC16ULPuiUnvxCoJqqewVG0oS6-G3cV_Yqd0AdFHgupYOC-F-hiUx8CNy-anyVZeqN1-8fFCwhIhpUl_RgkV_wVhtgn70deSD6CTINzyReNctXNPJuS9W");'></div>
+<div class="flex-1 min-w-0">
+<h4 class="text-text-main text-base font-bold truncate">清爽蒜蓉炒菠菜</h4>
+<p class="text-text-muted text-xs mt-1 font-bold">适配度 70%</p>
+<div class="flex items-center gap-3 mt-1.5">
+<div class="text-text-muted text-[10px] font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">schedule</span> 10 分钟
+                        </div>
+<div class="text-text-muted text-[10px] font-bold">还要准备: 蒜瓣</div>
+</div>
+</div>
+<button class="size-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-sm active:scale-90 transition-transform">
+<span class="material-symbols-outlined font-bold">add</span>
+</button>
+</div>
+</div>
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-[400px] px-6 pointer-events-none">
+<button class="w-full bg-text-main text-white h-16 py-4 rounded-full font-bold shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all pointer-events-auto" onclick="loadRecipes()">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+                换一批灵感
+            </button>
+</div>
+</div>
+<div class="fixed bottom-0 left-0 w-full px-5 pb-8 bg-gradient-to-t from-background-light via-background-light/95 to-transparent pt-12 z-40">
+<div class="max-w-md mx-auto relative flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-2xl rounded-full border border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.1)]">
+<div class="flex flex-col items-center gap-1 cursor-pointer" onclick="window.location.href='huaileme_home_risk_dashboard_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-slate-400 font-bold">home</span>
+<span class="text-[10px] font-black text-slate-400">首页</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='zero_waste_statistics_report_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]">savings</span>
+<span class="text-[10px] font-bold">统计</span>
+</div>
+<div class="absolute left-1/2 -translate-x-1/2 -top-10">
+<button class="size-16 rounded-full bg-primary text-white shadow-[0_15px_35px_rgba(19,236,128,0.5)] flex items-center justify-center border-[5px] border-white active:scale-90 transition-all duration-200" onclick="window.location.href='ai_smart_scanner_entry_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-3xl font-bold">qr_code_scanner</span>
+</button>
+<span class="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 w-max">扫一扫</span>
+</div>
+<div class="w-8"></div> 
+<div class="flex flex-col items-center gap-1 text-primary cursor-pointer" onclick="window.location.href='ai_fridge_clearing_recipes_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings:'FILL' 1">restaurant_menu</span>
+<span class="text-[10px] font-bold">菜谱</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" onclick="window.location.href='user_family_center_code.html'" style="cursor: pointer;">
+<span class="material-symbols-outlined text-[24px]">face</span>
+<span class="text-[10px] font-bold">设置</span>
+</div>
+</div>
+</div>
+
+</body></html>
